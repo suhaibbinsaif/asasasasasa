@@ -1,0 +1,172 @@
+@import "tailwindcss";
+
+html {
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+}
+
+body {
+  overflow-x: hidden;
+  background-color: #000;
+}
+
+@keyframes eq {
+  0%, 100% { transform: scaleY(0.2); }
+  50% { transform: scaleY(1); }
+}
+
+.eq-bar-1 { animation: eq 0.9s ease-in-out infinite; transform-origin: bottom; animation-delay: 0.1s; }
+.eq-bar-2 { animation: eq 0.7s ease-in-out infinite; transform-origin: bottom; animation-delay: 0.3s; }
+.eq-bar-3 { animation: eq 0.8s ease-in-out infinite; transform-origin: bottom; animation-delay: 0.0s; }
+
+/* Dynamic Cyber Glow Utilities */
+@keyframes cyber-glow-breathe {
+  0%, 100% {
+    opacity: 0.35;
+    filter: drop-shadow(0 0 25px var(--glow-color, rgba(6, 182, 212, 0.4)));
+    transform: scale(1) translate(0, 0);
+  }
+  50% {
+    opacity: 0.75;
+    filter: drop-shadow(0 0 50px var(--glow-color, rgba(6, 182, 212, 0.7))) drop-shadow(0 0 80px var(--glow-color, rgba(6, 182, 212, 0.3)));
+    transform: scale(1.08) translate(15px, -15px);
+  }
+}
+
+.animate-cyber-glow {
+  animation: cyber-glow-breathe 8s ease-in-out infinite;
+}
+
+@keyframes radar-sweep {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes float-gentle {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.2; }
+  50% { transform: scale(1.05); opacity: 0.5; }
+  100% { transform: scale(0.95); opacity: 0.2; }
+}
+
+.animate-radar-sweep {
+  animation: radar-sweep 24s linear infinite;
+}
+
+.animate-float-gentle {
+  animation: float-gentle 6s ease-in-out infinite;
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 4s ease-in-out infinite;
+}
+
+/* Custom Premium Scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #333333 #050505;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #050505;
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a3e635; /* cyber lime-400 */
+  box-shadow: 0 0 10px rgba(163, 230, 53, 0.5);
+}
+
+/* Theme Overrides - Default: Cyber Matrix Neon Lime (from image) */
+:root {
+  --color-cyan-200: #d9f99d;
+  --color-cyan-300: #bef264;
+  --color-cyan-400: #a3e635;
+  --color-cyan-500: #84cc16;
+  --color-cyan-600: #65a30d;
+  --color-cyan-900: #365314;
+  --color-cyan-950: #1a2e05;
+  --glow-color: rgba(163, 230, 53, 0.5);
+  --bg-base: #000000;
+  --bg-surface-1: #050505;
+  --bg-surface-2: #080808;
+  --bg-surface-3: #0a0a0a;
+}
+
+[data-theme="cyber-lime"] {
+  --color-cyan-200: #d9f99d;
+  --color-cyan-300: #bef264;
+  --color-cyan-400: #a3e635;
+  --color-cyan-500: #84cc16;
+  --color-cyan-600: #65a30d;
+  --color-cyan-900: #365314;
+  --color-cyan-950: #1a2e05;
+  --glow-color: rgba(163, 230, 53, 0.5);
+  --bg-base: #000000;
+  --bg-surface-1: #050505;
+  --bg-surface-2: #080808;
+  --bg-surface-3: #0a0a0a;
+}
+
+[data-theme="cyan"] {
+  --color-cyan-300: #67e8f9;
+  --color-cyan-400: #22d3ee;
+  --color-cyan-500: #06b6d4;
+  --color-cyan-900: #164e63;
+  --color-cyan-950: #083344;
+  --glow-color: rgba(6, 182, 212, 0.45);
+}
+
+[data-theme="midnight"] {
+  --color-cyan-300: #93c5fd;
+  --color-cyan-400: #60a5fa;
+  --color-cyan-500: #3b82f6;
+  --color-cyan-900: #1e3a8a;
+  --color-black: #020617;
+  --bg-base: #020617;
+  --bg-surface-1: #040914;
+  --bg-surface-2: #070d1a;
+  --bg-surface-3: #09101f;
+}
+[data-theme="midnight"] section {
+  background-color: var(--bg-surface-1);
+}
+[data-theme="midnight"] ::-webkit-scrollbar-track { background: #020617; }
+[data-theme="midnight"] ::-webkit-scrollbar-thumb { background: #1e293b; }
+[data-theme="midnight"] ::-webkit-scrollbar-thumb:hover { background: #60a5fa; box-shadow: 0 0 10px rgba(96, 165, 250, 0.5); }
+
+[data-theme="high-contrast"] {
+  --color-cyan-300: #d9f99d;
+  --color-cyan-400: #ccff00;
+  --color-cyan-500: #aadd00;
+  --color-cyan-900: #3f6212;
+  --color-black: #000000;
+  --color-gray-400: #e5e5e5;
+  --color-gray-500: #d4d4d4;
+  --color-gray-700: #404040;
+  --bg-base: #000000;
+  --bg-surface-1: #000000;
+  --bg-surface-2: #000000;
+  --bg-surface-3: #000000;
+}
+[data-theme="high-contrast"] section {
+  background-color: #000000;
+}
+[data-theme="high-contrast"] ::-webkit-scrollbar-track { background: #000000; border-left: 1px solid #333; }
+[data-theme="high-contrast"] ::-webkit-scrollbar-thumb { background: #333; }
+[data-theme="high-contrast"] ::-webkit-scrollbar-thumb:hover { background: #ccff00; box-shadow: 0 0 10px rgba(204, 255, 0, 0.5); }

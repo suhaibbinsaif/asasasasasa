@@ -1,0 +1,6 @@
+{
+  "name": "Shadow Club",
+  "description": "A private digital club built for creators, technology enthusiasts, gamers, and innovators.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
