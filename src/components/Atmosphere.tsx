@@ -56,7 +56,13 @@ export function Atmosphere() {
   const animFrameRef = useRef<number | null>(null);
 
   // Audio Engine Hook (Realistic Ambient Rain Sound)
-  const { isPlaying: isRainAudioPlaying, toggleAudio: toggleRainAudio, volume: rainVolume, setVolume: setRainVolume } = useAudio();
+  const {
+    isPlaying: isRainAudioPlaying,
+    isAutoPaused,
+    toggleAudio: toggleRainAudio,
+    volume: rainVolume,
+    setVolume: setRainVolume,
+  } = useAudio();
 
   // Weather Settings State
   const [weatherType, setWeatherType] = useState<WeatherType>('digital-rain');
@@ -557,10 +563,15 @@ export function Atmosphere() {
                     <Volume2 className="w-3 h-3 text-lime-400" />
                     <span>Rain Audio FX</span>
                   </span>
-                  <span className={`text-[9px] font-mono font-bold ${isRainAudioPlaying ? 'text-lime-400' : 'text-gray-500'}`}>
-                    {isRainAudioPlaying ? 'ACTIVE // PLAYING' : 'MUTED'}
+                  <span className={`text-[9px] font-mono font-bold ${isRainAudioPlaying ? 'text-lime-400' : isAutoPaused ? 'text-amber-400' : 'text-gray-500'}`}>
+                    {isRainAudioPlaying ? 'ACTIVE // PLAYING' : isAutoPaused ? 'STANDBY // TAB INACTIVE' : 'MUTED'}
                   </span>
                 </div>
+                <span className="text-[8px] font-mono text-gray-500">
+                  {isAutoPaused
+                    ? '⏸ Tab inactive: audio muted. Resumes automatically on return.'
+                    : '⚡ Smart Playback: Active on site, auto-mutes when away from tab.'}
+                </span>
 
                 <div className="flex items-center gap-2">
                   <button

@@ -1,12 +1,15 @@
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect, ReactNode } from 'react';
+import { safeStorage } from '../utils/storage';
 
 export type AudioMode = 'rain' | 'cyber-drone';
 
 interface AudioContextType {
   isPlaying: boolean;
+  isTabVisible: boolean;
+  isAutoPaused: boolean;
   toggleAudio: () => void;
-  playAudio: () => void;
-  pauseAudio: () => void;
+  playAudio: (isManual?: boolean) => void;
+  pauseAudio: (isManual?: boolean) => void;
   volume: number;
   setVolume: (v: number) => void;
   audioMode: AudioMode;
@@ -17,11 +20,23 @@ const AudioContextInstance = createContext<AudioContextType | undefined>(undefin
 
 export function AudioProvider({ children }: { children: ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isTabVisible, setIsTabVisible] = useState(() => (typeof document !== 'undefined' ? !document.hidden : true));
+  const [isAutoPaused, setIsAutoPaused] = useState(false);
   const [volume, setVolumeState] = useState(0.5);
-  const [audioMode, setAudioModeState] = useState<AudioMode>('rain'); // Default to RAIN sound as requested
+  const [audioMode, setAudioModeState] = useState<AudioMode>('rain');
 
   const ctxRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
+  const cachedNoiseBufferRef = useRef<AudioBuffer | null>(null);
+  const isPlayingRef = useRef(false);
+  const wasAutoPausedRef = useRef(false);
+
+  // Track if user explicitly muted the audio manually (persisted in safeStorage)
+  // Default to false so audio is ON when user is on the website
+  const userDisabledRef = useRef<boolean>(
+    safeStorage.getItem('rain-audio-enabled', 'true') === 'false'
+  );
+
   const rainNodesRef = useRef<{
     noiseSource?: AudioBufferSourceNode;
     dropletTimer?: ReturnType<typeof setTimeout>;
@@ -57,8 +72,11 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     return ctxRef.current;
   };
 
-  // Generate Warm Pink Noise Buffer for realistic rain texture
-  const createRainNoiseBuffer = (ctx: AudioContext, seconds = 4): AudioBuffer => {
+  // Generate Warm Pink Noise Buffer for realistic rain texture (cached for fast tab switching)
+  const getRainNoiseBuffer = (ctx: AudioContext, seconds = 4): AudioBuffer => {
+    if (cachedNoiseBufferRef.current && cachedNoiseBufferRef.current.sampleRate === ctx.sampleRate) {
+      return cachedNoiseBufferRef.current;
+    }
     const bufferSize = Math.floor(ctx.sampleRate * seconds);
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -76,6 +94,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.08;
       b6 = white * 0.115926;
     }
+    cachedNoiseBufferRef.current = buffer;
     return buffer;
   };
 
@@ -150,7 +169,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     rainNodesRef.current.isRunning = true;
 
     // 1. Continuous rainfall wash through shaped filters
-    const noiseBuffer = createRainNoiseBuffer(ctx, 4);
+    const noiseBuffer = getRainNoiseBuffer(ctx, 4);
     const noiseSource = ctx.createBufferSource();
     noiseSource.buffer = noiseBuffer;
     noiseSource.loop = true;
@@ -198,40 +217,77 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   }, [scheduleNextDroplet, stopSoundGenerators]);
 
   // Start Audio Engine with smooth volume ramp
-  const playAudio = useCallback(() => {
+  const playAudio = useCallback((isManual = false) => {
+    if (isManual) {
+      userDisabledRef.current = false;
+      safeStorage.setItem('rain-audio-enabled', 'true');
+    }
+
+    // Do not play if user intentionally muted, or if the document/tab is currently hidden
+    if (userDisabledRef.current) return;
+    if (typeof document !== 'undefined' && (document.hidden || document.visibilityState === 'hidden')) {
+      return;
+    }
+
     const ctx = getOrCreateContext();
     if (!ctx || !masterGainRef.current) return;
 
+    const performPlay = () => {
+      const masterGain = masterGainRef.current;
+      if (!masterGain) return;
+
+      if (!rainNodesRef.current.isRunning) {
+        startRainSound(ctx, masterGain);
+      }
+
+      // Smooth fade in
+      const targetVol = volumeRef.current * 0.45;
+      try {
+        masterGain.gain.cancelScheduledValues(ctx.currentTime);
+        const currentVal = masterGain.gain.value > 0 ? masterGain.gain.value : 0.001;
+        masterGain.gain.setValueAtTime(currentVal, ctx.currentTime);
+        masterGain.gain.exponentialRampToValueAtTime(Math.max(0.01, targetVol), ctx.currentTime + 0.6);
+      } catch {
+        masterGain.gain.value = targetVol;
+      }
+
+      setIsPlaying(true);
+      isPlayingRef.current = true;
+      wasAutoPausedRef.current = false;
+      setIsAutoPaused(false);
+    };
+
     if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
+      ctx.resume().then(performPlay).catch(() => {
+        // Autoplay policy waiting for user gesture
+      });
+    } else {
+      performPlay();
     }
-
-    const masterGain = masterGainRef.current;
-    startRainSound(ctx, masterGain);
-
-    // Fade in cleanly
-    const targetVol = volumeRef.current * 0.45;
-    try {
-      masterGain.gain.cancelScheduledValues(ctx.currentTime);
-      masterGain.gain.setValueAtTime(masterGain.gain.value || 0.001, ctx.currentTime);
-      masterGain.gain.exponentialRampToValueAtTime(Math.max(0.01, targetVol), ctx.currentTime + 1.0);
-    } catch {
-      masterGain.gain.value = targetVol;
-    }
-
-    setIsPlaying(true);
   }, [startRainSound]);
 
   // Pause Audio with smooth fade out
-  const pauseAudio = useCallback(() => {
+  const pauseAudio = useCallback((isManual = true) => {
+    if (isManual) {
+      userDisabledRef.current = true;
+      safeStorage.setItem('rain-audio-enabled', 'false');
+      wasAutoPausedRef.current = false;
+      setIsAutoPaused(false);
+    } else {
+      // Auto-paused because tab lost focus / visibility
+      wasAutoPausedRef.current = true;
+      setIsAutoPaused(true);
+    }
+
     const ctx = ctxRef.current;
     const masterGain = masterGainRef.current;
 
     if (ctx && masterGain && ctx.state !== 'closed') {
       try {
         masterGain.gain.cancelScheduledValues(ctx.currentTime);
-        masterGain.gain.setValueAtTime(masterGain.gain.value || 0.1, ctx.currentTime);
-        masterGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
+        const curGain = masterGain.gain.value > 0.0001 ? masterGain.gain.value : 0.1;
+        masterGain.gain.setValueAtTime(curGain, ctx.currentTime);
+        masterGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
       } catch {
         masterGain.gain.value = 0;
       }
@@ -239,18 +295,22 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       setTimeout(() => {
         stopSoundGenerators();
         setIsPlaying(false);
-      }, 650);
+        isPlayingRef.current = false;
+      }, 300);
     } else {
       stopSoundGenerators();
       setIsPlaying(false);
+      isPlayingRef.current = false;
     }
   }, [stopSoundGenerators]);
 
   const toggleAudio = useCallback(() => {
     if (isPlaying) {
-      pauseAudio();
+      pauseAudio(true);
     } else {
-      playAudio();
+      userDisabledRef.current = false;
+      safeStorage.setItem('rain-audio-enabled', 'true');
+      playAudio(true);
     }
   }, [isPlaying, pauseAudio, playAudio]);
 
@@ -279,6 +339,98 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     }
   }, [isPlaying, startRainSound]);
 
+  // Tab Visibility & Focus Lifecycle Management:
+  // "web be thuk le audio off thake web thuk le jate on thake"
+  // When leaving web (switching tab, minimizing, blur) -> Audio OFF
+  // When on web (focused, visible) -> Audio ON
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleVisibilityChange = () => {
+      const isHidden = document.hidden || document.visibilityState === 'hidden';
+      setIsTabVisible(!isHidden);
+
+      if (isHidden) {
+        // Tab switched away or minimized: turn audio OFF immediately
+        if (isPlayingRef.current) {
+          pauseAudio(false);
+        }
+      } else {
+        // Returned to tab: turn audio back ON if user hasn't explicitly disabled it
+        if (!userDisabledRef.current) {
+          playAudio(false);
+        }
+      }
+    };
+
+    const handleBlur = () => {
+      // Window lost focus (user moved to another program/window)
+      if (isPlayingRef.current) {
+        pauseAudio(false);
+      }
+    };
+
+    const handleFocus = () => {
+      // Window gained focus
+      if (!document.hidden && !userDisabledRef.current && wasAutoPausedRef.current) {
+        playAudio(false);
+      }
+    };
+
+    const handlePageHide = () => {
+      if (isPlayingRef.current) {
+        pauseAudio(false);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('pagehide', handlePageHide);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [pauseAudio, playAudio]);
+
+  // Initial Auto-Start When on Web ("web thuk le jate on thake"):
+  // Tries immediate autoplay, and hooks into first user gesture (touch, scroll, click, keydown)
+  // to satisfy browser autoplay requirements without user having to hunt for buttons
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Try starting immediately if tab is visible and audio isn't user-disabled
+    if (!userDisabledRef.current && !document.hidden) {
+      playAudio(false);
+    }
+
+    // Modern browsers require a user interaction to resume AudioContext.
+    // As soon as the user touches, scrolls, or clicks anything on the website:
+    const handleFirstGesture = () => {
+      if (!userDisabledRef.current && !document.hidden && !isPlayingRef.current) {
+        playAudio(false);
+      }
+    };
+
+    window.addEventListener('pointerdown', handleFirstGesture, { passive: true });
+    window.addEventListener('click', handleFirstGesture, { passive: true });
+    window.addEventListener('keydown', handleFirstGesture, { passive: true });
+    window.addEventListener('touchstart', handleFirstGesture, { passive: true });
+    window.addEventListener('scroll', handleFirstGesture, { passive: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', handleFirstGesture);
+      window.removeEventListener('click', handleFirstGesture);
+      window.removeEventListener('keydown', handleFirstGesture);
+      window.removeEventListener('touchstart', handleFirstGesture);
+      window.removeEventListener('scroll', handleFirstGesture);
+    };
+  }, [playAudio]);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopSoundGenerators();
@@ -292,6 +444,8 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     <AudioContextInstance.Provider
       value={{
         isPlaying,
+        isTabVisible,
+        isAutoPaused,
         toggleAudio,
         playAudio,
         pauseAudio,
